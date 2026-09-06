@@ -1,0 +1,54 @@
+{
+  "backbone_model": "ResNet50 (IMAGENET1K_V2, 2048-dim)",
+  "l2_normalized": true,
+  "geometric_feature_dim": 10,
+  "geometric_feature_names": [
+    "box_count",
+    "total_area_ratio",
+    "max_area_ratio",
+    "mean_aspect_ratio",
+    "count_dent",
+    "count_scratch",
+    "count_crack",
+    "count_glass_shatter",
+    "count_lamp_broken",
+    "count_tire_flat"
+  ],
+  "severity_benchmark": {
+    "train": {
+      "samples": 420,
+      "feature_dim": 2048,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\severity_features_train.npz"
+    },
+    "val": {
+      "samples": 90,
+      "feature_dim": 2048,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\severity_features_val.npz"
+    },
+    "test": {
+      "samples": 90,
+      "feature_dim": 2048,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\severity_features_test.npz"
+    }
+  },
+  "cardd_benchmark": {
+    "train": {
+      "samples": 560,
+      "cnn_dim": 2048,
+      "geom_dim": 10,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\cardd_features_train.npz"
+    },
+    "val": {
+      "samples": 120,
+      "cnn_dim": 2048,
+      "geom_dim": 10,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\cardd_features_val.npz"
+    },
+    "test": {
+      "samples": 120,
+      "cnn_dim": 2048,
+      "geom_dim": 10,
+      "file": "D:\\CEP project sy sem1\\Codebase CEP\\data\\features\\cardd_features_test.npz"
+    }
+  }
+}
