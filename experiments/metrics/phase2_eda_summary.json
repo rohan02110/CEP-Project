@@ -1,0 +1,38 @@
+{
+  "cardd_dataset": {
+    "total_images_analyzed": 800,
+    "corrupted_images_detected": 0,
+    "exact_duplicate_pairs": 0,
+    "total_bounding_boxes": 1709,
+    "average_boxes_per_image": 2.13625,
+    "class_distribution": {
+      "scratch": 556,
+      "tire flat": 169,
+      "crack": 167,
+      "dent": 490,
+      "lamp broken": 159,
+      "glass shatter": 168
+    },
+    "mean_damage_area_ratio": 0.18244380542849828,
+    "median_damage_area_ratio": 0.08194351034482758,
+    "image_resolutions": {
+      "mean_width": 979.47,
+      "mean_height": 700.0225,
+      "mean_aspect_ratio": 1.428691938364807
+    }
+  },
+  "severity_dataset": {
+    "total_images_analyzed": 600,
+    "class_distribution": {
+      "normal": 200,
+      "moderate_breakage": 200,
+      "severe_crushed": 200
+    }
+  },
+  "artifacts_generated": [
+    "experiments/plots/eda_cardd_class_distribution.png",
+    "experiments/plots/eda_cardd_bbox_geometry.png",
+    "experiments/plots/eda_severity_distribution.png",
+    "experiments/plots/eda_sample_detections_grid.png"
+  ]
+}

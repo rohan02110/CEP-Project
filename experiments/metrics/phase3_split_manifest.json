@@ -1,0 +1,65 @@
+{
+  "random_seed": 42,
+  "split_ratios": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15
+  },
+  "cardd_detection_splits": {
+    "train": {
+      "num_images": 560,
+      "num_boxes": 1181,
+      "class_distribution": {
+        "scratch": 388,
+        "glass shatter": 117,
+        "dent": 328,
+        "crack": 115,
+        "lamp broken": 124,
+        "tire flat": 109
+      }
+    },
+    "val": {
+      "num_images": 120,
+      "num_boxes": 272,
+      "class_distribution": {
+        "scratch": 85,
+        "tire flat": 38,
+        "glass shatter": 23,
+        "dent": 78,
+        "lamp broken": 14,
+        "crack": 34
+      }
+    },
+    "test": {
+      "num_images": 120,
+      "num_boxes": 256,
+      "class_distribution": {
+        "scratch": 83,
+        "dent": 84,
+        "glass shatter": 28,
+        "lamp broken": 21,
+        "tire flat": 22,
+        "crack": 18
+      }
+    }
+  },
+  "cardd_yaml_config": "D:\\CEP project sy sem1\\Codebase CEP\\data\\processed\\cardd\\dataset.yaml",
+  "severity_classification_splits": {
+    "train": {
+      "normal": 140,
+      "moderate_breakage": 140,
+      "severe_crushed": 140
+    },
+    "val": {
+      "normal": 30,
+      "moderate_breakage": 30,
+      "severe_crushed": 30
+    },
+    "test": {
+      "normal": 30,
+      "moderate_breakage": 30,
+      "severe_crushed": 30
+    }
+  },
+  "zero_leakage_verified": true
+}

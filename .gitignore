@@ -1,0 +1,30 @@
+# Byte-compiled / Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment & IDE
+.venv/
+env/
+venv/
+.vscode/
+.idea/
+.DS_Store
+
+# Large Raw and Processed Datasets (Auto-downloaded via src/data_loader_eda.py)
+data/raw/
+data/processed/
+data/features/
+
+# Training runs & intermediate caches
+experiments/models/yolo_runs/
+runs/
+*.cache
+yolov8n.pt
+Arial.ttf
+
+# Keep checkpoints, plots, metrics and code
+!experiments/models/yolov8_damage_best.pt
+!experiments/plots/
+!experiments/metrics/
