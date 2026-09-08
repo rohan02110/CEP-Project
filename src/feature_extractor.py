@@ -54,18 +54,21 @@ class DeepFeatureExtractor:
         ])
 
     @torch.no_grad()
-    def extract_image_embedding(self, image_path: Path) -> np.ndarray:
-        """Extracts a 2048-dim L2-normalized feature embedding from a single image."""
+    def extract_image_embedding(self, image_input) -> np.ndarray:
+        """Extracts a 2048-dim L2-normalized feature embedding from an image path or PIL Image."""
         try:
-            with Image.open(image_path) as img:
-                img_rgb = img.convert("RGB")
-                tensor = self.transform(img_rgb).unsqueeze(0).to(self.device)
-                feat = self.model(tensor)
-                feat_np = feat.cpu().numpy().flatten()
-                norm = np.linalg.norm(feat_np)
-                if norm > 0:
-                    feat_np = feat_np / norm
-                return feat_np
+            if isinstance(image_input, Image.Image):
+                img_rgb = image_input.convert("RGB")
+            else:
+                with Image.open(image_input) as img:
+                    img_rgb = img.convert("RGB")
+            tensor = self.transform(img_rgb).unsqueeze(0).to(self.device)
+            feat = self.model(tensor)
+            feat_np = feat.cpu().numpy().flatten()
+            norm = np.linalg.norm(feat_np)
+            if norm > 0:
+                feat_np = feat_np / norm
+            return feat_np
         except Exception as e:
             return np.zeros(2048, dtype=np.float32)
 

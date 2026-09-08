@@ -1,0 +1,70 @@
+[
+  {
+    "image": "000007.jpg",
+    "vehicle": "Honda Civic EX",
+    "segment": "midsize",
+    "damages_detected": 1,
+    "damage_classes": [
+      "tire flat"
+    ],
+    "severity": "severe_crushed",
+    "gross_repair_cost": 1262.18,
+    "net_payout": 762.18,
+    "is_total_loss": false,
+    "fraud_risk": "LOW",
+    "latency_ms": 548.62,
+    "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000007.png"
+  },
+  {
+    "image": "000037.jpg",
+    "vehicle": "Toyota RAV4 XLE",
+    "segment": "suv",
+    "damages_detected": 2,
+    "damage_classes": [
+      "tire flat",
+      "dent"
+    ],
+    "severity": "severe_crushed",
+    "gross_repair_cost": 3086.45,
+    "net_payout": 2586.45,
+    "is_total_loss": false,
+    "fraud_risk": "LOW",
+    "latency_ms": 162.02,
+    "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000037.png"
+  },
+  {
+    "image": "000041.jpg",
+    "vehicle": "BMW 330i Sport",
+    "segment": "luxury",
+    "damages_detected": 1,
+    "damage_classes": [
+      "glass shatter"
+    ],
+    "severity": "severe_crushed",
+    "gross_repair_cost": 3708.93,
+    "net_payout": 2708.93,
+    "is_total_loss": false,
+    "fraud_risk": "LOW",
+    "latency_ms": 143.03,
+    "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000041.png"
+  },
+  {
+    "image": "000046.jpg",
+    "vehicle": "Hyundai Elantra",
+    "segment": "economy",
+    "damages_detected": 4,
+    "damage_classes": [
+      "scratch",
+      "scratch",
+      "scratch",
+      "scratch"
+    ],
+    "severity": "moderate_breakage",
+    "gross_repair_cost": 1733.08,
+    "net_payout": 1433.08,
+    "is_total_loss": false,
+    "fraud_risk": "LOW",
+    "latency_ms": 132.02,
+    "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000046.png"
+  }
+]
