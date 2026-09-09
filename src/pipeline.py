@@ -1,6 +1,6 @@
 """
 End-to-End AI Vehicle Damage Assessment, Severity Classification,
-Fraud/Anomaly Detection, and Repair Cost Estimation Pipeline.
+Fraud/Anomaly Detection, Background Car Filtering, and Repair Cost Estimation Pipeline.
 """
 
 import os
@@ -45,6 +45,9 @@ CLASS_COLORS = {
     "tire flat": (52, 73, 94)        # Dark Slate
 }
 
+# COCO Vehicle Class IDs in standard YOLOv8
+COCO_VEHICLE_CLASSES = [2, 3, 5, 7]  # 2: car, 3: motorcycle, 5: bus, 7: truck
+
 
 @dataclass
 class FraudAnomalyReport:
@@ -66,17 +69,20 @@ class FullAssessmentResult:
     cost_estimate: ClaimCostEstimate
     fraud_audit: FraudAnomalyReport
     processing_time_ms: float
+    primary_vehicle_roi: Optional[List[float]] = None
+    filtered_background_damages_count: int = 0
+    suppressed_tire_false_positives_count: int = 0
     annotated_image_path: Optional[str] = None
 
 
 class VehicleDamageAssessmentPipeline:
     """
     Unified multi-stage inference pipeline:
-    1. Localized Damage Detection (YOLOv8)
-    2. Deep Feature Extraction (ResNet50)
-    3. Global Severity Classification (Champion Classifier)
+    1. Primary Subject Vehicle Localization (filters background cars & shop clutter)
+    2. Localized Damage Detection (YOLOv8) with False Positive Suppression
+    3. Deep Feature Extraction (ResNet50) & Global Severity Classification
     4. Fraud & Claim Inconsistency Auditing
-    5. Actuarial Cost Estimation & Uncertainty Analysis
+    5. Data-Driven & Actuarial Cost Estimation
     """
 
     def __init__(
@@ -88,7 +94,7 @@ class VehicleDamageAssessmentPipeline:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[PIPELINE INIT] Initializing End-to-End Pipeline on {self.device.upper()}...", flush=True)
 
-        # 1. Load YOLOv8 Detector
+        # 1. Load YOLOv8 Damage Detector
         if detector_weights is None:
             detector_weights = MODELS_DIR / "yolov8_damage_best.pt"
             if not detector_weights.exists():
@@ -99,11 +105,22 @@ class VehicleDamageAssessmentPipeline:
         print(f"[PIPELINE INIT] Loading YOLOv8 Damage Detector from: {detector_weights}", flush=True)
         self.detector = YOLO(str(detector_weights))
 
-        # 2. Load ResNet50 Feature Extractor
+        # 2. Load Pretrained YOLO for Vehicle Localization (Subject RoI)
+        coco_weights = WORKSPACE_ROOT / "yolov8n.pt"
+        if not coco_weights.exists():
+            coco_weights = "yolov8n.pt"
+        print(f"[PIPELINE INIT] Initializing Vehicle Localization Model...", flush=True)
+        try:
+            self.vehicle_detector = YOLO(str(coco_weights))
+        except Exception as e:
+            print(f"[WARNING] Could not load vehicle detector: {e}")
+            self.vehicle_detector = None
+
+        # 3. Load ResNet50 Feature Extractor
         print("[PIPELINE INIT] Initializing ResNet50 Deep Feature Extractor...", flush=True)
         self.feature_extractor = DeepFeatureExtractor(device=self.device)
 
-        # 3. Load Champion Severity Classifier
+        # 4. Load Champion Severity Classifier
         if severity_model_path is None:
             severity_model_path = MODELS_DIR / "severity_classifier_best.joblib"
 
@@ -117,22 +134,149 @@ class VehicleDamageAssessmentPipeline:
             self.severity_classifier = None
             self.severity_model_name = "Fallback Heuristic"
 
-        # 4. Load Cost Estimation Engine
+        # 5. Load Cost Estimation Engine (With ML Regressor)
         self.cost_engine = CostEstimationEngine()
         print("[PIPELINE INIT] Pipeline initialization complete!\n", flush=True)
+
+    def locate_primary_subject_vehicle(
+        self,
+        pil_img: Image.Image,
+        conf_thresh: float = 0.25
+    ) -> Optional[List[float]]:
+        """
+        Detects all vehicles in the scene and selects the primary subject vehicle RoI
+        based on foreground bounding area and center prominence.
+        Returns: [x1, y1, x2, y2] of the primary vehicle or None.
+        """
+        if self.vehicle_detector is None:
+            return None
+
+        img_w, img_h = pil_img.size
+        img_area = float(img_w * img_h)
+
+        try:
+            results = self.vehicle_detector.predict(
+                source=pil_img,
+                classes=COCO_VEHICLE_CLASSES,
+                conf=conf_thresh,
+                verbose=False,
+                device=self.device
+            )
+
+            if len(results) == 0 or results[0].boxes is None or len(results[0].boxes) == 0:
+                return None
+
+            boxes = results[0].boxes
+            best_roi = None
+            best_score = -1.0
+
+            for box in boxes:
+                xyxy = [float(x) for x in box.xyxy[0].tolist()]
+                bw = max(0.0, xyxy[2] - xyxy[0])
+                bh = max(0.0, xyxy[3] - xyxy[1])
+                area_ratio = (bw * bh) / img_area
+
+                # Reject tiny vehicles (< 5% of frame) as background clutter
+                if area_ratio < 0.05:
+                    continue
+
+                cx = (xyxy[0] + xyxy[2]) / 2.0
+                cy = (xyxy[1] + xyxy[3]) / 2.0
+                dist_center = np.sqrt(((cx - img_w / 2.0) / img_w) ** 2 + ((cy - img_h / 2.0) / img_h) ** 2)
+
+                # Score combines size prominence with centrality
+                score = area_ratio * (1.0 - 0.35 * dist_center)
+
+                if score > best_score:
+                    best_score = score
+                    # Add a 4% margin around vehicle bounds to catch edge panel/lamp/bumper damage
+                    pad_x = bw * 0.04
+                    pad_y = bh * 0.04
+                    best_roi = [
+                        max(0.0, xyxy[0] - pad_x),
+                        max(0.0, xyxy[1] - pad_y),
+                        min(float(img_w), xyxy[2] + pad_x),
+                        min(float(img_h), xyxy[3] + pad_y)
+                    ]
+
+            return best_roi
+        except Exception as e:
+            return None
+
+    def validate_tire_flat(
+        self,
+        cv_img_bgr: np.ndarray,
+        bbox_xyxy: List[float],
+        conf: float
+    ) -> Tuple[bool, str]:
+        """
+        Geometrically and visually validates whether a detected wheel is genuinely flat/punctured
+        or an intact, normal inflated tire.
+        Returns: (is_valid_flat, reason_string)
+        """
+        # 1. Require elevated minimum confidence threshold for tire flat
+        if conf < 0.45:
+            return False, f"Confidence ({conf*100:.1f}%) below minimum required threshold for flat tire (45%)"
+
+        img_h, img_w = cv_img_bgr.shape[:2]
+        x1, y1, x2, y2 = [int(max(0, min(v, img_w if i % 2 == 0 else img_h))) for i, v in enumerate(bbox_xyxy)]
+        bw = max(1, x2 - x1)
+        bh = max(1, y2 - y1)
+
+        aspect_ratio = bw / float(bh)
+
+        # 2. Geometric Shape Analysis:
+        # A normal, fully inflated wheel is nearly circular / square bounding box (aspect ratio 0.85 - 1.18).
+        # A deflated flat tire has collapsed under car weight, flattening at contact surface (aspect ratio > 1.25).
+        if 0.85 <= aspect_ratio <= 1.18 and conf < 0.85:
+            # Check edge gradient distribution
+            crop = cv_img_bgr[y1:y2, x1:x2]
+            if crop.shape[0] > 10 and crop.shape[1] > 10:
+                gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                # Compute contour roundness of rim
+                blur = cv2.GaussianBlur(gray, (5, 5), 0)
+                edges = cv2.Canny(blur, 50, 150)
+                contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if len(contours) > 0:
+                    max_c = max(contours, key=cv2.contourArea)
+                    area = cv2.contourArea(max_c)
+                    perimeter = cv2.arcLength(max_c, True)
+                    if perimeter > 0:
+                        circularity = 4 * np.pi * (area / (perimeter * perimeter))
+                        if circularity > 0.45:
+                            return False, f"Intact round wheel profile detected (circularity: {circularity:.2f}, aspect: {aspect_ratio:.2f})"
+
+            return False, f"Normal inflated wheel profile (aspect ratio: {aspect_ratio:.2f})"
+
+        return True, "Deflation/damage confirmed"
 
     def assess_image(
         self,
         image_input: Union[str, Path, np.ndarray, Image.Image],
         vehicle_profile: Optional[VehicleProfile] = None,
-        conf_threshold: float = 0.25,
+        conf_threshold: float = 0.20,
         iou_threshold: float = 0.45,
+        filter_background_vehicles: bool = True,
+        validate_tires: bool = True,
+        min_conf_per_class: Optional[Dict[str, float]] = None,
         output_plot_path: Optional[Union[str, Path]] = None
     ) -> FullAssessmentResult:
         """
         Executes end-to-end multi-stage assessment on an input vehicle image.
         """
         start_time = time.perf_counter()
+
+        # Class-specific confidence thresholds
+        default_class_confs = {
+            "dent": conf_threshold,
+            "scratch": conf_threshold,
+            "crack": max(0.20, conf_threshold),
+            "glass shatter": max(0.25, conf_threshold),
+            "lamp broken": max(0.25, conf_threshold),
+            "tire flat": max(0.48, conf_threshold) # Higher threshold to prevent normal wheel false positives
+        }
+        if min_conf_per_class:
+            default_class_confs.update(min_conf_per_class)
 
         # Resolve Image Input to PIL & Numpy BGR
         if isinstance(image_input, (str, Path)):
@@ -167,32 +311,72 @@ class VehicleDamageAssessmentPipeline:
             )
 
         # -------------------------------------------------------------
-        # STAGE 1: Localized Damage Detection (YOLOv8)
+        # STAGE 0: Primary Subject Vehicle RoI Localization
         # -------------------------------------------------------------
+        primary_roi = None
+        if filter_background_vehicles:
+            primary_roi = self.locate_primary_subject_vehicle(pil_img)
+
+        # -------------------------------------------------------------
+        # STAGE 1: Localized Damage Detection (YOLOv8) & Intelligent Filtering
+        # -------------------------------------------------------------
+        # We query YOLO with lowest common denominator threshold, then filter per-class and per-RoI
+        query_conf = min(conf_threshold, 0.15)
         det_results = self.detector.predict(
             source=pil_img,
-            conf=conf_threshold,
+            conf=query_conf,
             iou=iou_threshold,
             verbose=False,
             device=self.device
         )
 
         detected_damages: List[DetectedDamage] = []
+        filtered_bg_count = 0
+        suppressed_tire_count = 0
+
         if len(det_results) > 0 and det_results[0].boxes is not None:
             boxes = det_results[0].boxes
-            for idx, box in enumerate(boxes):
+            raw_candidates = []
+
+            for box in boxes:
                 cls_id = int(box.cls[0].item())
                 conf = float(box.conf[0].item())
                 xyxy = [float(x) for x in box.xyxy[0].tolist()]
-                
+                cls_name = CARDD_CLASSES[cls_id] if cls_id < len(CARDD_CLASSES) else "dent"
+                raw_candidates.append((cls_name, conf, xyxy))
+
+            # Filter candidates
+            for cls_name, conf, xyxy in raw_candidates:
+                # 1. Per-Class Minimum Confidence Filter
+                min_c = default_class_confs.get(cls_name, conf_threshold)
+                if conf < min_c:
+                    continue
+
+                # 2. Primary Subject Vehicle RoI Filter (Background Car & Clutter Elimination)
+                if primary_roi is not None:
+                    # Calculate center point of damage bounding box
+                    dcx = (xyxy[0] + xyxy[2]) / 2.0
+                    dcy = (xyxy[1] + xyxy[3]) / 2.0
+                    vx1, vy1, vx2, vy2 = primary_roi
+
+                    # Check if damage center lies inside primary vehicle RoI
+                    if dcx < vx1 or dcx > vx2 or dcy < vy1 or dcy > vy2:
+                        filtered_bg_count += 1
+                        continue
+
+                # 3. Tire Flat False Positive Verification Filter
+                if cls_name == "tire flat" and validate_tires:
+                    is_valid, reason = self.validate_tire_flat(cv_img_bgr, xyxy, conf)
+                    if not is_valid:
+                        suppressed_tire_count += 1
+                        continue
+
                 bw = max(0.0, xyxy[2] - xyxy[0])
                 bh = max(0.0, xyxy[3] - xyxy[1])
                 norm_area = (bw * bh) / img_area
 
-                cls_name = CARDD_CLASSES[cls_id] if cls_id < len(CARDD_CLASSES) else "dent"
-
                 detected_damages.append(DetectedDamage(
-                    instance_id=idx + 1,
+                    instance_id=len(detected_damages) + 1,
                     damage_type=cls_name,
                     confidence=round(conf, 3),
                     bbox_xyxy=[round(c, 1) for c in xyxy],
@@ -263,6 +447,7 @@ class VehicleDamageAssessmentPipeline:
             self._render_full_inspection_sheet(
                 cv_img_bgr=cv_img_bgr,
                 detected_damages=detected_damages,
+                primary_roi=primary_roi,
                 predicted_severity=predicted_severity,
                 severity_conf=severity_conf,
                 cost_estimate=cost_estimate,
@@ -281,6 +466,9 @@ class VehicleDamageAssessmentPipeline:
             cost_estimate=cost_estimate,
             fraud_audit=fraud_audit,
             processing_time_ms=round(elapsed_ms, 2),
+            primary_vehicle_roi=primary_roi,
+            filtered_background_damages_count=filtered_bg_count,
+            suppressed_tire_false_positives_count=suppressed_tire_count,
             annotated_image_path=annotated_path_str
         )
 
@@ -339,6 +527,7 @@ class VehicleDamageAssessmentPipeline:
         self,
         cv_img_bgr: np.ndarray,
         detected_damages: List[DetectedDamage],
+        primary_roi: Optional[List[float]],
         predicted_severity: str,
         severity_conf: float,
         cost_estimate: ClaimCostEstimate,
@@ -347,14 +536,22 @@ class VehicleDamageAssessmentPipeline:
         save_path: Path
     ):
         """
-        Renders a composite, publication-grade inspection sheet with:
-        - Bounding box annotations
-        - HUD overlay header with claim metrics
-        - Side-by-side cost breakdown and uncertainty curves
+        Renders a composite inspection sheet.
         """
         annotated_bgr = cv_img_bgr.copy()
         img_h, img_w, _ = annotated_bgr.shape
 
+        # Draw Primary Subject Vehicle RoI boundary if detected
+        if primary_roi is not None:
+            vx1, vy1, vx2, vy2 = [int(v) for v in primary_roi]
+            cv2.rectangle(annotated_bgr, (vx1, vy1), (vx2, vy2), (0, 215, 255), 2, lineType=cv2.LINE_AA)
+            cv2.putText(
+                annotated_bgr, "PRIMARY SUBJECT VEHICLE RoI",
+                (vx1 + 5, max(20, vy1 + 25)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 215, 255), 2, cv2.LINE_AA
+            )
+
+        # Draw Damage Bounding Boxes
         for dmg in detected_damages:
             x1, y1, x2, y2 = [int(v) for v in dmg.bbox_xyxy]
             color = CLASS_COLORS.get(dmg.damage_type, (0, 255, 0))
@@ -378,7 +575,7 @@ class VehicleDamageAssessmentPipeline:
         ax_img = fig.add_subplot(gs[0, :])
         ax_img.imshow(annotated_rgb)
         ax_img.set_title(
-            f"AI Vision Damage Localization ({len(detected_damages)} Damage Instances Detected) | Latency: {elapsed_ms:.1f} ms",
+            f"AI Vision Damage Localization ({len(detected_damages)} Damage Instances on Subject Vehicle) | Latency: {elapsed_ms:.1f} ms",
             fontsize=13, fontweight="bold", pad=10
         )
         ax_img.axis("off")
@@ -421,6 +618,7 @@ class VehicleDamageAssessmentPipeline:
             f"• Severity: {predicted_severity.upper()} (Confidence: {severity_conf*100:.1f}%)\n"
             f"• Gross Repair Cost: USD {cost_estimate.estimated_total_cost:,.2f}\n"
             f"• Net Insurer Payout: USD {cost_estimate.net_claim_payout:,.2f}\n"
+            f"• ML Regressor Benchmark: USD {cost_estimate.ml_empirical_estimate:,.2f}\n"
             f"• 90% Confidence Bounds: USD {cost_estimate.cost_p10_optimistic:,.0f} - USD {cost_estimate.cost_p90_pessimistic:,.0f}\n"
             f"• Loss Ratio: {cost_estimate.loss_ratio*100:.1f}% of ACV (CTL Threshold: 75%)\n"
             f"• Claim Status: {'[!] CONSTRUCTIVE TOTAL LOSS' if cost_estimate.is_total_loss else '[OK] REPAIR AUTHORIZED'}\n"
@@ -441,7 +639,7 @@ class VehicleDamageAssessmentPipeline:
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.tight_layout()
-        plt.savefig(save_path, dpi=250, bbox_inches="tight")
+        plt.savefig(save_path, dpi=120, bbox_inches="tight")
         plt.close()
         print(f"[PIPELINE] Saved Complete Inspection Sheet to: {save_path}", flush=True)
 
@@ -480,14 +678,17 @@ def test_pipeline_on_sample_images():
             image_input=img_p,
             vehicle_profile=veh,
             conf_threshold=0.20,
+            filter_background_vehicles=True,
+            validate_tires=True,
             output_plot_path=out_plot
         )
 
         print(f"  -> Detections: {len(result.detected_damages)} damage instance(s)")
+        print(f"  -> Filtered BG Damages: {result.filtered_background_damages_count}, Suppressed Tires: {result.suppressed_tire_false_positives_count}")
         for d in result.detected_damages:
             print(f"     * #{d.instance_id} {d.damage_type} (conf: {d.confidence*100:.1f}%, norm_area: {d.normalized_area:.4f})")
         print(f"  -> Severity: {result.predicted_severity.upper()} ({result.severity_probabilities})")
-        print(f"  -> Gross Repair Cost: ${result.cost_estimate.estimated_total_cost:,.2f}")
+        print(f"  -> Gross Repair Cost: ${result.cost_estimate.estimated_total_cost:,.2f} | ML Benchmark: ${result.cost_estimate.ml_empirical_estimate:,.2f}")
         print(f"  -> Net Payout: ${result.cost_estimate.net_claim_payout:,.2f}")
         print(f"  -> Fraud/Anomaly Risk: {result.fraud_audit.risk_level} (Score: {result.fraud_audit.anomaly_score})")
         print(f"  -> Latency: {result.processing_time_ms:.1f} ms\n")
@@ -500,6 +701,7 @@ def test_pipeline_on_sample_images():
             "damage_classes": [d.damage_type for d in result.detected_damages],
             "severity": result.predicted_severity,
             "gross_repair_cost": result.cost_estimate.estimated_total_cost,
+            "ml_empirical_estimate": result.cost_estimate.ml_empirical_estimate,
             "net_payout": result.cost_estimate.net_claim_payout,
             "is_total_loss": result.cost_estimate.is_total_loss,
             "fraud_risk": result.fraud_audit.risk_level,

@@ -6,7 +6,7 @@ Usage Examples:
     python src/test_claim.py --image data/processed/cardd/images/test/000046.jpg
 
     # Test with custom vehicle parameters
-    python src/test_claim.py --image path/to/my_car.jpg --model "Toyota Camry" --year 2022 --segment midsize --acv 22000 --deductible 500
+    python src/test_claim.py --image path/to/my_car.jpg --make "BMW M3" --year 2021 --segment luxury --acv 50000 --deductible 500
 
     # Test a random sample from the test set
     python src/test_claim.py --random
@@ -38,6 +38,8 @@ def parse_args():
     parser.add_argument("--acv", type=float, default=22000.0, help="Actual Cash Value (market value) in USD.")
     parser.add_argument("--deductible", type=float, default=500.0, help="Policyholder deductible in USD.")
     parser.add_argument("--conf", type=float, default=0.20, help="YOLOv8 damage confidence threshold.")
+    parser.add_argument("--no-filter-bg", action="store_true", help="Disable background vehicle filtering.")
+    parser.add_argument("--no-validate-tires", action="store_true", help="Disable tire deflation validation.")
     parser.add_argument("--out", type=str, default=None, help="Output plot destination path.")
     return parser.parse_args()
 
@@ -79,6 +81,8 @@ def main():
         image_input=image_path,
         vehicle_profile=vehicle,
         conf_threshold=args.conf,
+        filter_background_vehicles=not args.no_filter_bg,
+        validate_tires=not args.no_validate_tires,
         output_plot_path=out_plot
     )
 
@@ -90,10 +94,13 @@ def main():
     print(f"[PIPELINE SUMMARY]")
     print(f"• Image Path          : {image_path}")
     print(f"• Damages Detected    : {len(result.detected_damages)}")
+    print(f"• Filtered BG Clutter : {result.filtered_background_damages_count} instance(s)")
+    print(f"• Suppressed Tires    : {result.suppressed_tire_false_positives_count} instance(s)")
     for d in result.detected_damages:
         print(f"   - #{d.instance_id} {d.damage_type.upper()} ({d.confidence*100:.1f}% conf, area: {d.normalized_area*100:.2f}%)")
     print(f"• Crash Severity      : {result.predicted_severity.upper()} ({result.severity_probabilities})")
     print(f"• Gross Repair Cost   : USD {result.cost_estimate.estimated_total_cost:,.2f}")
+    print(f"• ML Empirical Claim  : USD {result.cost_estimate.ml_empirical_estimate:,.2f}")
     print(f"• Net Claim Payout    : USD {result.cost_estimate.net_claim_payout:,.2f}")
     print(f"• 90% Confidence      : USD {result.cost_estimate.cost_p10_optimistic:,.2f} - USD {result.cost_estimate.cost_p90_pessimistic:,.2f}")
     print(f"• Total Loss Status   : {'[!] CONSTRUCTIVE TOTAL LOSS' if result.cost_estimate.is_total_loss else '[OK] REPAIRABLE'}")

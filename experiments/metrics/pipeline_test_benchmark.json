@@ -9,27 +9,28 @@
     ],
     "severity": "severe_crushed",
     "gross_repair_cost": 1262.18,
+    "ml_empirical_estimate": 2096.59,
     "net_payout": 762.18,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 548.62,
+    "latency_ms": 559.8,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000007.png"
   },
   {
     "image": "000037.jpg",
     "vehicle": "Toyota RAV4 XLE",
     "segment": "suv",
-    "damages_detected": 2,
+    "damages_detected": 1,
     "damage_classes": [
-      "tire flat",
       "dent"
     ],
     "severity": "severe_crushed",
-    "gross_repair_cost": 3086.45,
-    "net_payout": 2586.45,
+    "gross_repair_cost": 2664.97,
+    "ml_empirical_estimate": 2139.35,
+    "net_payout": 2164.97,
     "is_total_loss": false,
-    "fraud_risk": "LOW",
-    "latency_ms": 162.02,
+    "fraud_risk": "MEDIUM",
+    "latency_ms": 404.08,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000037.png"
   },
   {
@@ -42,10 +43,11 @@
     ],
     "severity": "severe_crushed",
     "gross_repair_cost": 3708.93,
+    "ml_empirical_estimate": 2110.46,
     "net_payout": 2708.93,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 143.03,
+    "latency_ms": 243.29,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000041.png"
   },
   {
@@ -61,10 +63,11 @@
     ],
     "severity": "moderate_breakage",
     "gross_repair_cost": 1733.08,
+    "ml_empirical_estimate": 1899.18,
     "net_payout": 1433.08,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 132.02,
+    "latency_ms": 287.22,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000046.png"
   }
 ]
