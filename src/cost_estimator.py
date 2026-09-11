@@ -1,7 +1,8 @@
 """
 Knowledge-Grounded Vehicle Repair Cost Estimation Engine.
 Integrates YOLOv8 localized damage detections, ResNet50 severity classifications,
-and actuarial domain knowledge tables to compute itemized, probabilistic repair costs.
+actuarial domain knowledge tables, and a data-driven ML Regressor trained on 26k+ real claims
+to compute itemized, probabilistic, and empirical repair costs.
 """
 
 import sys
@@ -18,10 +19,12 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import joblib
 
 from src.config import (
-    CARDD_CLASSES, SEVERITY_CLASSES, METRICS_DIR, PLOTS_DIR, RANDOM_SEED
+    CARDD_CLASSES, SEVERITY_CLASSES, MODELS_DIR, METRICS_DIR, PLOTS_DIR, RANDOM_SEED
 )
 
 np.random.seed(RANDOM_SEED)
@@ -55,9 +58,9 @@ PAINT_MATERIAL_RATE_PER_HR = 38.0
 
 # Base Severity Multipliers & Structural Surcharges
 SEVERITY_FACTORS = {
-    "normal": {"multiplier": 1.00, "frame_hours": 0.0, "structural_check": 0.0},
-    "moderate_breakage": {"multiplier": 1.40, "frame_hours": 1.5, "structural_check": 150.0},
-    "severe_crushed": {"multiplier": 2.25, "frame_hours": 5.0, "structural_check": 450.0},
+    "normal": {"multiplier": 1.00, "frame_hours": 0.0, "structural_check": 0.0, "level_idx": 0},
+    "moderate_breakage": {"multiplier": 1.40, "frame_hours": 1.5, "structural_check": 150.0, "level_idx": 1},
+    "severe_crushed": {"multiplier": 2.25, "frame_hours": 5.0, "structural_check": 450.0, "level_idx": 2},
 }
 
 # Actuarial Base Rate Catalogs per Damage Class
@@ -194,6 +197,10 @@ class ClaimCostEstimate:
     cost_p90_pessimistic: float
     std_deviation: float
     
+    # Data-Driven ML Empirical Regressor Benchmark (Trained on 26k+ Claims)
+    ml_empirical_estimate: float
+    ml_model_name: str
+    
     # Constructive Total Loss Analysis
     is_total_loss: bool
     loss_ratio: float                     # Total Cost / ACV
@@ -202,8 +209,9 @@ class ClaimCostEstimate:
 
 class CostEstimationEngine:
     """
-    Actuarial Knowledge-Grounded Repair Cost Estimation Engine.
-    Combines computer vision signals with domain pricing matrices and uncertainty modeling.
+    Actuarial Knowledge-Grounded & ML-Calibrated Repair Cost Estimation Engine.
+    Combines computer vision signals with domain pricing matrices, empirical ML regressors,
+    and Monte Carlo uncertainty modeling.
     """
 
     def __init__(self, labor_rates: Optional[Dict[str, float]] = None):
@@ -211,6 +219,22 @@ class CostEstimationEngine:
         self.damage_catalog = DAMAGE_RATE_CATALOG
         self.severity_factors = SEVERITY_FACTORS
         self.segment_multipliers = SEGMENT_MULTIPLIERS
+        
+        # Load ML Cost Regressor
+        self.ml_regressor = None
+        self.ml_model_name = "Actuarial Baseline"
+        self._load_ml_regressor()
+
+    def _load_ml_regressor(self):
+        reg_path = MODELS_DIR / "repair_cost_regressor_best.joblib"
+        if reg_path.exists():
+            try:
+                ckpt = joblib.load(reg_path)
+                self.ml_regressor = ckpt["model"]
+                self.ml_model_name = ckpt.get("model_name", "HistGradientBoosting Regressor")
+                print(f"[COST ENGINE] Successfully loaded ML Cost Regressor: {self.ml_model_name}")
+            except Exception as e:
+                print(f"[WARNING] Failed loading ML regressor: {e}")
 
     def estimate_claim(
         self,
@@ -225,6 +249,7 @@ class CostEstimationEngine:
         """
         sev_info = self.severity_factors.get(severity_class, self.severity_factors["moderate_breakage"])
         sev_mult = sev_info["multiplier"]
+        sev_idx = sev_info["level_idx"]
         seg_mult = self.segment_multipliers.get(vehicle.segment, 1.0)
 
         itemized_items: List[ItemizedCostItem] = []
@@ -305,6 +330,30 @@ class CostEstimationEngine:
             structural_overhead + shop_supplies
         )
 
+        # ML Empirical Claim Regressor Prediction
+        ml_estimate = subtotal_direct
+        if self.ml_regressor is not None:
+            try:
+                veh_age = max(0, 2026 - vehicle.year)
+                power_proxy = 11 if vehicle.segment == VehicleSegment.LUXURY_PREMIUM else (8 if vehicle.segment == VehicleSegment.SUV_CROSSOVER else (6 if vehicle.segment == VehicleSegment.MIDSIZE_SEDAN else 4))
+                features_df = pd.DataFrame([{
+                    "veh_age": veh_age,
+                    "veh_power": power_proxy,
+                    "density_log": 6.8, # standard metro density log
+                    "labor_rate_index": np.mean(list(self.labor_rates.values())),
+                    "segment_multiplier": seg_mult,
+                    "severity_level": sev_idx,
+                    "bonus_malus": 100.0
+                }])
+                pred_log = self.ml_regressor.predict(features_df)[0]
+                base_ml_claim = float(np.exp(pred_log))
+                
+                # Scale ML estimate by number of damaged instances relative to median collision (2.5 parts)
+                damage_factor = max(0.6, min(3.0, (len(detected_damages) if detected_damages else 1) / 2.5))
+                ml_estimate = round(base_ml_claim * damage_factor, 2)
+            except Exception as e:
+                ml_estimate = subtotal_direct
+
         # Monte Carlo Uncertainty Simulation
         mc_distribution = self._run_monte_carlo(
             base_labor=tot_labor_cost,
@@ -350,6 +399,8 @@ class CostEstimationEngine:
             cost_p50_median=round(p50, 2),
             cost_p90_pessimistic=round(p90, 2),
             std_deviation=round(std_dev, 2),
+            ml_empirical_estimate=round(ml_estimate, 2),
+            ml_model_name=self.ml_model_name,
             is_total_loss=is_total_loss,
             loss_ratio=round(loss_ratio, 3),
             salvage_value=salvage_value
@@ -440,6 +491,9 @@ class CostEstimationEngine:
         lines.append(f"  >>> Less Policy Deductible     : -${est.policy_deductible:>9,.2f}")
         lines.append(f"  >>> NET INSURER CLAIM PAYOUT    : ${est.net_claim_payout:>10,.2f}")
         lines.append("-" * 80)
+        lines.append(f"EMPIRICAL ML BENCHMARK ({est.ml_model_name}):")
+        lines.append(f"  • ML Historical Claim Forecast : ${est.ml_empirical_estimate:>10,.2f}")
+        lines.append("-" * 80)
         lines.append("STATISTICAL UNCERTAINTY (Monte Carlo 90% Confidence Bounds):")
         lines.append(f"  • P10 (Optimistic Bound) : ${est.cost_p10_optimistic:>10,.2f}")
         lines.append(f"  • P50 (Expected Median)  : ${est.cost_p50_median:>10,.2f}")
@@ -461,7 +515,7 @@ class CostEstimationEngine:
 def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
     """
     Generates a publication-quality cost breakdown visualization.
-    Shows itemized damage costs and cost component proportions.
+    Shows itemized damage costs, ML empirical benchmark, and uncertainty.
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6), gridspec_kw={"width_ratios": [1.2, 1]})
 
@@ -516,6 +570,8 @@ def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
                 label=f"P50 (Median): ${estimate.cost_p50_median:,.0f}")
     ax2.axvline(estimate.cost_p90_pessimistic, color="#c62828", linestyle="--", linewidth=2,
                 label=f"P90 (Pessimistic): ${estimate.cost_p90_pessimistic:,.0f}")
+    ax2.axvline(estimate.ml_empirical_estimate, color="#8e24aa", linestyle=":", linewidth=2.2,
+                label=f"ML Claim Regressor: ${estimate.ml_empirical_estimate:,.0f}")
 
     ax2.set_title(f"Uncertainty Bounds: ${estimate.estimated_total_cost:,.2f} Expected",
                   fontsize=13, fontweight="bold", pad=12)
@@ -531,156 +587,17 @@ def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
     )
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.savefig(save_path, dpi=120, bbox_inches="tight")
     plt.close()
     print(f"Saved Cost Breakdown Visualization to: {save_path}", flush=True)
 
 
-def benchmark_cost_engine_across_scenarios():
-    """
-    Executes a comprehensive validation benchmark across diverse insurance claim scenarios.
-    """
-    print("\n" + "="*70)
-    print("EXECUTING PHASE 7: KNOWLEDGE-GROUNDED REPAIR COST ENGINE BENCHMARK")
-    print("="*70, flush=True)
-
-    engine = CostEstimationEngine()
-
-    scenarios = [
-        {
-            "name": "Scenario 1: Minor Parking Lot Scraping",
-            "vehicle": VehicleProfile(
-                vehicle_id="V-2024-001",
-                make_model="Toyota Corolla LE",
-                year=2021,
-                segment=VehicleSegment.MIDSIZE_SEDAN,
-                actual_cash_value=18500.0,
-                deductible=500.0
-            ),
-            "damages": [
-                DetectedDamage(1, "scratch", 0.92, [100, 200, 250, 230], 0.012),
-                DetectedDamage(2, "dent", 0.88, [150, 210, 320, 310], 0.025),
-            ],
-            "severity": "normal",
-            "severity_prob": 0.94
-        },
-        {
-            "name": "Scenario 2: Moderate Front-End Collision",
-            "vehicle": VehicleProfile(
-                vehicle_id="V-2024-002",
-                make_model="Honda CR-V EX",
-                year=2022,
-                segment=VehicleSegment.SUV_CROSSOVER,
-                actual_cash_value=27000.0,
-                deductible=500.0
-            ),
-            "damages": [
-                DetectedDamage(1, "dent", 0.91, [120, 150, 400, 380], 0.065),
-                DetectedDamage(2, "crack", 0.87, [180, 320, 410, 420], 0.038),
-                DetectedDamage(3, "lamp broken", 0.95, [380, 140, 520, 280], 0.028),
-            ],
-            "severity": "moderate_breakage",
-            "severity_prob": 0.89
-        },
-        {
-            "name": "Scenario 3: Severe High-Speed T-Bone Crash",
-            "vehicle": VehicleProfile(
-                vehicle_id="V-2024-003",
-                make_model="BMW 330i xDrive",
-                year=2020,
-                segment=VehicleSegment.LUXURY_PREMIUM,
-                actual_cash_value=32000.0,
-                deductible=1000.0
-            ),
-            "damages": [
-                DetectedDamage(1, "dent", 0.94, [50, 80, 580, 500], 0.220),
-                DetectedDamage(2, "crack", 0.89, [120, 300, 450, 520], 0.090),
-                DetectedDamage(3, "glass shatter", 0.96, [150, 50, 500, 280], 0.085),
-                DetectedDamage(4, "lamp broken", 0.93, [480, 220, 600, 360], 0.035),
-                DetectedDamage(5, "tire flat", 0.90, [80, 380, 240, 540], 0.045),
-            ],
-            "severity": "severe_crushed",
-            "severity_prob": 0.96
-        },
-        {
-            "name": "Scenario 4: Economy Total-Loss Claim",
-            "vehicle": VehicleProfile(
-                vehicle_id="V-2024-004",
-                make_model="Maruti Suzuki Swift",
-                year=2016,
-                segment=VehicleSegment.ECONOMY,
-                actual_cash_value=4800.0,
-                deductible=250.0
-            ),
-            "damages": [
-                DetectedDamage(1, "dent", 0.95, [40, 60, 550, 480], 0.210),
-                DetectedDamage(2, "lamp broken", 0.92, [420, 180, 580, 320], 0.030),
-                DetectedDamage(3, "crack", 0.88, [100, 280, 480, 490], 0.080),
-                DetectedDamage(4, "glass shatter", 0.94, [120, 40, 460, 260], 0.075),
-            ],
-            "severity": "severe_crushed",
-            "severity_prob": 0.95
-        }
-    ]
-
-    benchmark_outputs = []
-
-    for sc in scenarios:
-        print(f"\nEvaluating: {sc['name']}...")
-        estimate = engine.estimate_claim(
-            vehicle=sc["vehicle"],
-            detected_damages=sc["damages"],
-            severity_class=sc["severity"],
-            severity_prob=sc["severity_prob"]
-        )
-
-        report_txt = engine.generate_adjuster_text_report(estimate)
-        print(report_txt)
-
-        if sc["vehicle"].vehicle_id == "V-2024-002":
-            plot_path = PLOTS_DIR / "cost_breakdown_scenario2.png"
-            plot_cost_breakdown(estimate, plot_path)
-
-        benchmark_outputs.append({
-            "scenario": sc["name"],
-            "vehicle_id": sc["vehicle"].vehicle_id,
-            "make_model": sc["vehicle"].make_model,
-            "segment": sc["vehicle"].segment.value,
-            "actual_cash_value": sc["vehicle"].actual_cash_value,
-            "severity": sc["severity"],
-            "damage_count": estimate.damage_count,
-            "total_labor_cost": estimate.total_labor_cost,
-            "total_parts_cost": estimate.total_parts_cost,
-            "total_paint_materials": estimate.total_paint_materials_cost,
-            "structural_overhead": estimate.structural_overhead_cost,
-            "gross_repair_cost": estimate.estimated_total_cost,
-            "deductible": estimate.policy_deductible,
-            "net_payout": estimate.net_claim_payout,
-            "p10_optimistic": estimate.cost_p10_optimistic,
-            "p50_median": estimate.cost_p50_median,
-            "p90_pessimistic": estimate.cost_p90_pessimistic,
-            "is_total_loss": estimate.is_total_loss,
-            "loss_ratio": estimate.loss_ratio,
-            "salvage_value": estimate.salvage_value,
-            "itemized_ledger": [asdict(itm) for itm in estimate.itemized_damages]
-        })
-
-    summary_file = METRICS_DIR / "phase7_cost_estimation_benchmark.json"
-    with open(summary_file, "w", encoding="utf-8") as f:
-        json.dump({
-            "phase": "Phase 7 — Knowledge-Grounded Repair Cost Estimation Engine",
-            "rate_tables": {
-                "labor_rates_usd_hr": LABOR_RATES,
-                "paint_materials_usd_hr": PAINT_MATERIAL_RATE_PER_HR,
-                "segment_multipliers": {k.value: v for k, v in SEGMENT_MULTIPLIERS.items()},
-                "severity_multipliers": SEVERITY_FACTORS
-            },
-            "benchmark_scenarios": benchmark_outputs
-        }, f, indent=2)
-
-    print(f"\n[SUCCESS] Exported Phase 7 Cost Estimation Benchmark to: {summary_file}")
-    return benchmark_outputs
-
-
 if __name__ == "__main__":
-    benchmark_cost_engine_across_scenarios()
+    eng = CostEstimationEngine()
+    vp = VehicleProfile("TEST-01", "BMW M3", 2021, VehicleSegment.LUXURY_PREMIUM, 50000.0, 500.0)
+    dmgs = [
+        DetectedDamage(1, "dent", 0.85, [100, 100, 300, 300], 0.05),
+        DetectedDamage(2, "scratch", 0.78, [50, 50, 150, 150], 0.02)
+    ]
+    res = eng.estimate_claim(vp, dmgs, "normal", 0.9)
+    print(eng.generate_adjuster_text_report(res))

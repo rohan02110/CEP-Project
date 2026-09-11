@@ -1,0 +1,54 @@
+{
+  "dataset": "OpenML French Motor Insurance Claim Benchmark (freMTPL2)",
+  "total_claims": 26067,
+  "clean_records": 26067,
+  "champion_model": "HistGradientBoosting Regressor",
+  "feature_names": [
+    "veh_age",
+    "veh_power",
+    "density_log",
+    "labor_rate_index",
+    "segment_multiplier",
+    "severity_level",
+    "bonus_malus"
+  ],
+  "feature_importances": {
+    "veh_age": 0.0018316981581063985,
+    "veh_power": 0.0001768481431291935,
+    "density_log": 0.0010707669067349767,
+    "labor_rate_index": 0.0,
+    "segment_multiplier": 0.0,
+    "severity_level": 1.1873008679823318,
+    "bonus_malus": 0.0028933733581695932
+  },
+  "benchmark_results": {
+    "HistGradientBoosting Regressor": {
+      "r2_score": 0.1472857319636386,
+      "mae_usd": 786.144846237343,
+      "median_absolute_error_usd": 137.4176928446284,
+      "rmse_usd": 3678.1176346216303,
+      "test_sample_size": 5214
+    },
+    "Random Forest Regressor": {
+      "r2_score": 0.1526385711527508,
+      "mae_usd": 790.6486279753523,
+      "median_absolute_error_usd": 139.34059263277547,
+      "rmse_usd": 3666.5549293132685,
+      "test_sample_size": 5214
+    },
+    "Gradient Boosting Regressor": {
+      "r2_score": 0.14905978591424052,
+      "mae_usd": 790.2042809753013,
+      "median_absolute_error_usd": 141.15782666135547,
+      "rmse_usd": 3674.2895196396057,
+      "test_sample_size": 5214
+    },
+    "Ridge Actuarial Linear": {
+      "r2_score": 0.15572353797890526,
+      "mae_usd": 798.0942217794184,
+      "median_absolute_error_usd": 157.98362157139735,
+      "rmse_usd": 3659.87447760774,
+      "test_sample_size": 5214
+    }
+  }
+}
