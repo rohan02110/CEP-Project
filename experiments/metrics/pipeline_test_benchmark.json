@@ -13,7 +13,7 @@
     "net_payout": 762.18,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 559.8,
+    "latency_ms": 631.95,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000007.png"
   },
   {
@@ -30,7 +30,7 @@
     "net_payout": 2164.97,
     "is_total_loss": false,
     "fraud_risk": "MEDIUM",
-    "latency_ms": 404.08,
+    "latency_ms": 300.51,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000037.png"
   },
   {
@@ -47,7 +47,7 @@
     "net_payout": 2708.93,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 243.29,
+    "latency_ms": 326.13,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000041.png"
   },
   {
@@ -67,7 +67,7 @@
     "net_payout": 1433.08,
     "is_total_loss": false,
     "fraud_risk": "LOW",
-    "latency_ms": 287.22,
+    "latency_ms": 266.66,
     "inspection_sheet": "D:\\CEP project sy sem1\\Codebase CEP\\experiments\\plots\\pipeline_test_inspection_000046.png"
   }
 ]

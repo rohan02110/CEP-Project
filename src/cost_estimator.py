@@ -24,7 +24,8 @@ import matplotlib.pyplot as plt
 import joblib
 
 from src.config import (
-    CARDD_CLASSES, SEVERITY_CLASSES, MODELS_DIR, METRICS_DIR, PLOTS_DIR, RANDOM_SEED
+    CARDD_CLASSES, SEVERITY_CLASSES, MODELS_DIR, METRICS_DIR, PLOTS_DIR, RANDOM_SEED,
+    USD_TO_INR, CURRENCY_SYMBOL
 )
 
 np.random.seed(RANDOM_SEED)
@@ -45,31 +46,31 @@ SEGMENT_MULTIPLIERS = {
     VehicleSegment.LUXURY_PREMIUM: 1.85,
 }
 
-# Standard Industry Hourly Labor Rates (USD / hr)
+# Standard Industry Hourly Labor Rates (INR / hr, natively scaled by USD_TO_INR)
 LABOR_RATES = {
-    "body": 65.0,        # Standard sheet metal / body labor
-    "paint": 70.0,       # Refinish / paint labor
-    "mechanical": 85.0,  # Mechanical & electrical labor (sensors, ADAS, lamps, tires)
-    "frame": 95.0,       # Frame rack & structural pulling labor
+    "body": 65.0 * USD_TO_INR,        # Standard sheet metal / body labor (₹6,207.50 / hr)
+    "paint": 70.0 * USD_TO_INR,       # Refinish / paint labor (₹6,685.00 / hr)
+    "mechanical": 85.0 * USD_TO_INR,  # Mechanical & electrical labor (₹8,117.50 / hr)
+    "frame": 95.0 * USD_TO_INR,       # Frame rack & structural pulling labor (₹9,072.50 / hr)
 }
 
-# Paint & Material consumables cost per paint labor hour
-PAINT_MATERIAL_RATE_PER_HR = 38.0
+# Paint & Material consumables cost per paint labor hour (INR)
+PAINT_MATERIAL_RATE_PER_HR = 38.0 * USD_TO_INR
 
-# Base Severity Multipliers & Structural Surcharges
+# Base Severity Multipliers & Structural Surcharges (INR)
 SEVERITY_FACTORS = {
-    "normal": {"multiplier": 1.00, "frame_hours": 0.0, "structural_check": 0.0, "level_idx": 0},
-    "moderate_breakage": {"multiplier": 1.40, "frame_hours": 1.5, "structural_check": 150.0, "level_idx": 1},
-    "severe_crushed": {"multiplier": 2.25, "frame_hours": 5.0, "structural_check": 450.0, "level_idx": 2},
+    "normal": {"multiplier": 1.00, "frame_hours": 0.0, "structural_check": 0.0 * USD_TO_INR, "level_idx": 0},
+    "moderate_breakage": {"multiplier": 1.40, "frame_hours": 1.5, "structural_check": 150.0 * USD_TO_INR, "level_idx": 1},
+    "severe_crushed": {"multiplier": 2.25, "frame_hours": 5.0, "structural_check": 450.0 * USD_TO_INR, "level_idx": 2},
 }
 
-# Actuarial Base Rate Catalogs per Damage Class
+# Actuarial Base Rate Catalogs per Damage Class (INR)
 DAMAGE_RATE_CATALOG = {
     "dent": {
         "base_body_hours": 2.0,
         "base_paint_hours": 1.8,
         "base_mech_hours": 0.0,
-        "base_part_cost": 350.0,    # OEM panel replacement if not repairable
+        "base_part_cost": 350.0 * USD_TO_INR,    # OEM panel replacement if not repairable (₹33,425)
         "replace_area_threshold": 0.08, # >8% bounding area triggers replacement
         "replace_default": False,
         "repair_description": "Panel beating, PDR, filler & surface blending",
@@ -89,7 +90,7 @@ DAMAGE_RATE_CATALOG = {
         "base_body_hours": 1.8,
         "base_paint_hours": 1.5,
         "base_mech_hours": 0.5,
-        "base_part_cost": 380.0,    # Bumper cover or grille
+        "base_part_cost": 380.0 * USD_TO_INR,    # Bumper cover or grille (₹36,290)
         "replace_area_threshold": 0.05,
         "replace_default": False,
         "repair_description": "Plastic welding, reinforcement & bumper respray",
@@ -99,7 +100,7 @@ DAMAGE_RATE_CATALOG = {
         "base_body_hours": 0.5,
         "base_paint_hours": 0.0,
         "base_mech_hours": 2.5,     # Glass removal, urethane bonding, ADAS calibration
-        "base_part_cost": 480.0,    # OEM laminated glass
+        "base_part_cost": 480.0 * USD_TO_INR,    # OEM laminated glass (₹45,840)
         "replace_area_threshold": 0.00,
         "replace_default": True,    # Glass is always replaced
         "repair_description": "Resin injection (minor chip only)",
@@ -109,7 +110,7 @@ DAMAGE_RATE_CATALOG = {
         "base_body_hours": 0.4,
         "base_paint_hours": 0.0,
         "base_mech_hours": 1.2,     # Assembly fitment, wiring harness, aiming
-        "base_part_cost": 420.0,    # OEM projector/LED housing
+        "base_part_cost": 420.0 * USD_TO_INR,    # OEM projector/LED housing (₹40,110)
         "replace_area_threshold": 0.00,
         "replace_default": True,    # Broken housing is replaced for safety
         "repair_description": "Lens buffing (minor scuff only)",
@@ -119,7 +120,7 @@ DAMAGE_RATE_CATALOG = {
         "base_body_hours": 0.0,
         "base_paint_hours": 0.0,
         "base_mech_hours": 0.8,     # Mount, balance, TPMS reset
-        "base_part_cost": 175.0,    # OEM specification tire
+        "base_part_cost": 175.0 * USD_TO_INR,    # OEM specification tire (₹16,712.50)
         "replace_area_threshold": 0.00,
         "replace_default": True,    # Flat or damaged tire is replaced
         "repair_description": "Radial puncture patch (tread area only)",
@@ -135,8 +136,8 @@ class VehicleProfile:
     make_model: str
     year: int
     segment: VehicleSegment = VehicleSegment.MIDSIZE_SEDAN
-    actual_cash_value: float = 22000.0   # Current market value (ACV)
-    deductible: float = 500.0             # Policyholder deductible
+    actual_cash_value: float = 2000000.0   # Current market value in INR (ACV ₹)
+    deductible: float = 25000.0            # Policyholder deductible in INR (₹)
 
 
 @dataclass
@@ -322,15 +323,15 @@ class CostEstimationEngine:
         structural_check = sev_info["structural_check"] * seg_mult
         structural_overhead = frame_cost + structural_check
 
-        # Shop supplies / environmental disposal fee: 6% of labor + paint materials, capped at $150
-        shop_supplies = min(150.0, 0.06 * (tot_labor_cost + tot_paint_mat_cost))
+        # Shop supplies / environmental disposal fee: 6% of labor + paint materials, capped at ₹14,325 ($150 * USD_TO_INR)
+        shop_supplies = min(150.0 * USD_TO_INR, 0.06 * (tot_labor_cost + tot_paint_mat_cost))
 
         subtotal_direct = (
             tot_labor_cost + tot_parts_cost + tot_paint_mat_cost +
             structural_overhead + shop_supplies
         )
 
-        # ML Empirical Claim Regressor Prediction
+        # ML Empirical Claim Regressor Prediction (Converted from USD to INR)
         ml_estimate = subtotal_direct
         if self.ml_regressor is not None:
             try:
@@ -340,17 +341,18 @@ class CostEstimationEngine:
                     "veh_age": veh_age,
                     "veh_power": power_proxy,
                     "density_log": 6.8, # standard metro density log
-                    "labor_rate_index": np.mean(list(self.labor_rates.values())),
+                    "labor_rate_index": np.mean(list(self.labor_rates.values())) / USD_TO_INR, # regressor was trained on USD index
                     "segment_multiplier": seg_mult,
                     "severity_level": sev_idx,
                     "bonus_malus": 100.0
                 }])
                 pred_log = self.ml_regressor.predict(features_df)[0]
-                base_ml_claim = float(np.exp(pred_log))
+                base_ml_claim_usd = float(np.exp(pred_log))
+                base_ml_claim_inr = base_ml_claim_usd * USD_TO_INR
                 
                 # Scale ML estimate by number of damaged instances relative to median collision (2.5 parts)
                 damage_factor = max(0.6, min(3.0, (len(detected_damages) if detected_damages else 1) / 2.5))
-                ml_estimate = round(base_ml_claim * damage_factor, 2)
+                ml_estimate = round(base_ml_claim_inr * damage_factor, 2)
             except Exception as e:
                 ml_estimate = subtotal_direct
 
@@ -462,49 +464,49 @@ class CostEstimationEngine:
         lines.append("=" * 80)
         lines.append(f"Claim Reference ID : CLM-{v.vehicle_id}")
         lines.append(f"Insured Vehicle    : {v.year} {v.make_model} [{v.segment.upper()}]")
-        lines.append(f"Actual Cash Value  : ${v.actual_cash_value:,.2f}  |  Policy Deductible: ${v.deductible:,.2f}")
+        lines.append(f"Actual Cash Value  : ₹{v.actual_cash_value:,.2f}  |  Policy Deductible: ₹{v.deductible:,.2f}")
         lines.append(f"Crash Severity     : {est.predicted_severity.upper()} (Confidence: {est.severity_confidence*100:.1f}%)")
         lines.append(f"Damages Detected   : {est.damage_count} distinct localized instance(s)")
         lines.append("-" * 80)
-        lines.append(f"{'ID':<4} {'Damage Class':<14} {'Conf':<6} {'Action':<9} {'Labor ($)':<12} {'Parts ($)':<11} {'Total ($)':<10}")
+        lines.append(f"{'ID':<4} {'Damage Class':<14} {'Conf':<6} {'Action':<9} {'Labor (₹)':<14} {'Parts (₹)':<13} {'Total (₹)':<12}")
         lines.append("-" * 80)
 
         for itm in est.itemized_damages:
             lines.append(
                 f"{itm.instance_id:<4} {itm.damage_type:<14} {itm.confidence:<6.2f} {itm.action:<9} "
-                f"${itm.total_labor_cost:<11.2f} ${itm.parts_cost:<10.2f} ${itm.item_subtotal:<9.2f}"
+                f"₹{itm.total_labor_cost:<13.2f} ₹{itm.parts_cost:<12.2f} ₹{itm.item_subtotal:<11.2f}"
             )
             lines.append(f"     -> Operation: {itm.description} (Body: {itm.body_labor_hours}h, Paint: {itm.paint_labor_hours}h, Mech: {itm.mech_labor_hours}h)")
 
         lines.append("-" * 80)
-        lines.append("FINANCIAL SUMMARY & COST LEDGER:")
-        lines.append(f"  • Total Body Labor Cost       : ${est.total_body_labor_cost:>10,.2f}")
-        lines.append(f"  • Total Paint Labor Cost      : ${est.total_paint_labor_cost:>10,.2f}")
-        lines.append(f"  • Total Mechanical Labor Cost : ${est.total_mech_labor_cost:>10,.2f}")
-        lines.append(f"  • Subtotal Labor Hours Cost   : ${est.total_labor_cost:>10,.2f}")
-        lines.append(f"  • Total OEM Replacement Parts : ${est.total_parts_cost:>10,.2f}")
-        lines.append(f"  • Paint & Refinish Materials  : ${est.total_paint_materials_cost:>10,.2f}")
-        lines.append(f"  • Frame Pulling & Structural  : ${est.structural_overhead_cost:>10,.2f}")
-        lines.append(f"  • Shop Supplies & Hazardous   : ${est.shop_supplies_fee:>10,.2f}")
+        lines.append("FINANCIAL SUMMARY & COST LEDGER (INR):")
+        lines.append(f"  • Total Body Labor Cost       : ₹{est.total_body_labor_cost:>12,.2f}")
+        lines.append(f"  • Total Paint Labor Cost      : ₹{est.total_paint_labor_cost:>12,.2f}")
+        lines.append(f"  • Total Mechanical Labor Cost : ₹{est.total_mech_labor_cost:>12,.2f}")
+        lines.append(f"  • Subtotal Labor Hours Cost   : ₹{est.total_labor_cost:>12,.2f}")
+        lines.append(f"  • Total OEM Replacement Parts : ₹{est.total_parts_cost:>12,.2f}")
+        lines.append(f"  • Paint & Refinish Materials  : ₹{est.total_paint_materials_cost:>12,.2f}")
+        lines.append(f"  • Frame Pulling & Structural  : ₹{est.structural_overhead_cost:>12,.2f}")
+        lines.append(f"  • Shop Supplies & Hazardous   : ₹{est.shop_supplies_fee:>12,.2f}")
         lines.append("-" * 80)
-        lines.append(f"  >>> GROSS ESTIMATED REPAIR COST : ${est.estimated_total_cost:>10,.2f}")
-        lines.append(f"  >>> Less Policy Deductible     : -${est.policy_deductible:>9,.2f}")
-        lines.append(f"  >>> NET INSURER CLAIM PAYOUT    : ${est.net_claim_payout:>10,.2f}")
+        lines.append(f"  >>> GROSS ESTIMATED REPAIR COST : ₹{est.estimated_total_cost:>12,.2f}")
+        lines.append(f"  >>> Less Policy Deductible     : -₹{est.policy_deductible:>11,.2f}")
+        lines.append(f"  >>> NET INSURER CLAIM PAYOUT    : ₹{est.net_claim_payout:>12,.2f}")
         lines.append("-" * 80)
         lines.append(f"EMPIRICAL ML BENCHMARK ({est.ml_model_name}):")
-        lines.append(f"  • ML Historical Claim Forecast : ${est.ml_empirical_estimate:>10,.2f}")
+        lines.append(f"  • ML Historical Claim Forecast : ₹{est.ml_empirical_estimate:>12,.2f}")
         lines.append("-" * 80)
         lines.append("STATISTICAL UNCERTAINTY (Monte Carlo 90% Confidence Bounds):")
-        lines.append(f"  • P10 (Optimistic Bound) : ${est.cost_p10_optimistic:>10,.2f}")
-        lines.append(f"  • P50 (Expected Median)  : ${est.cost_p50_median:>10,.2f}")
-        lines.append(f"  • P90 (Pessimistic Bound): ${est.cost_p90_pessimistic:>10,.2f}")
-        lines.append(f"  • Standard Deviation     : ${est.std_deviation:>10,.2f}")
+        lines.append(f"  • P10 (Optimistic Bound) : ₹{est.cost_p10_optimistic:>12,.2f}")
+        lines.append(f"  • P50 (Expected Median)  : ₹{est.cost_p50_median:>12,.2f}")
+        lines.append(f"  • P90 (Pessimistic Bound): ₹{est.cost_p90_pessimistic:>12,.2f}")
+        lines.append(f"  • Standard Deviation     : ₹{est.std_deviation:>12,.2f}")
         lines.append("-" * 80)
         lines.append("TOTAL LOSS / SALVAGE DETERMINATION:")
         lines.append(f"  • Loss-to-Value Ratio    : {est.loss_ratio * 100:.1f}% (Threshold: 75.0%)")
         if est.is_total_loss:
             lines.append("  • STATUS                 : [!] CONSTRUCTIVE TOTAL LOSS (CTL)")
-            lines.append(f"  • Recommended Action     : Vehicle salvage settlement (Est. Salvage Recovery: ${est.salvage_value:,.2f})")
+            lines.append(f"  • Recommended Action     : Vehicle salvage settlement (Est. Salvage Recovery: ₹{est.salvage_value:,.2f})")
         else:
             lines.append("  • STATUS                 : [OK] REPAIRABLE")
             lines.append("  • Recommended Action     : Issue automated repair authorization to certified body shop")
@@ -514,7 +516,7 @@ class CostEstimationEngine:
 
 def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
     """
-    Generates a publication-quality cost breakdown visualization.
+    Generates a publication-quality cost breakdown visualization in Indian Rupees (INR).
     Shows itemized damage costs, ML empirical benchmark, and uncertainty.
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6), gridspec_kw={"width_ratios": [1.2, 1]})
@@ -536,8 +538,8 @@ def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
     colors = ["#2b5c8f", "#3a7bd5", "#43a047", "#e53935", "#fb8c00", "#8e24aa", "#757575"]
 
     bars = ax1.bar(categories, values, color=colors, alpha=0.9, edgecolor="black", linewidth=0.8)
-    ax1.set_title("Repair Cost Breakdown by Category", fontsize=13, fontweight="bold", pad=12)
-    ax1.set_ylabel("Cost in USD ($)", fontsize=11, fontweight="bold")
+    ax1.set_title("Repair Cost Breakdown by Category (INR)", fontsize=13, fontweight="bold", pad=12)
+    ax1.set_ylabel("Cost in INR (₹)", fontsize=11, fontweight="bold")
     ax1.set_xticks(range(len(categories)))
     ax1.set_xticklabels(categories, rotation=25, ha="right", fontsize=10)
     ax1.grid(axis="y", linestyle="--", alpha=0.5)
@@ -545,17 +547,17 @@ def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
     for bar in bars:
         h = bar.get_height()
         if h > 0:
-            ax1.annotate(f"${h:,.0f}",
+            ax1.annotate(f"₹{h:,.0f}",
                          xy=(bar.get_x() + bar.get_width() / 2, h),
                          xytext=(0, 4), textcoords="offset points",
                          ha="center", va="bottom", fontsize=9, fontweight="bold")
 
     # 2. Monte Carlo Uncertainty Distribution
-    x_min = max(0.0, estimate.cost_p10_optimistic - 2 * max(estimate.std_deviation, 50.0))
-    x_max = estimate.cost_p90_pessimistic + 2 * max(estimate.std_deviation, 50.0)
+    x_min = max(0.0, estimate.cost_p10_optimistic - 2 * max(estimate.std_deviation, 500.0))
+    x_max = estimate.cost_p90_pessimistic + 2 * max(estimate.std_deviation, 500.0)
     x_range = np.linspace(x_min, x_max, 500)
     
-    std = max(estimate.std_deviation, 20.0)
+    std = max(estimate.std_deviation, 200.0)
     y_dens = (1.0 / (std * np.sqrt(2 * np.pi))) * np.exp(
         -0.5 * ((x_range - estimate.cost_p50_median) / std) ** 2
     )
@@ -565,24 +567,24 @@ def plot_cost_breakdown(estimate: ClaimCostEstimate, save_path: Path):
 
     # Add vertical quantile lines
     ax2.axvline(estimate.cost_p10_optimistic, color="#43a047", linestyle="--", linewidth=2,
-                label=f"P10 (Optimistic): ${estimate.cost_p10_optimistic:,.0f}")
+                label=f"P10 (Optimistic): ₹{estimate.cost_p10_optimistic:,.0f}")
     ax2.axvline(estimate.cost_p50_median, color="#e65100", linestyle="-", linewidth=2.2,
-                label=f"P50 (Median): ${estimate.cost_p50_median:,.0f}")
+                label=f"P50 (Median): ₹{estimate.cost_p50_median:,.0f}")
     ax2.axvline(estimate.cost_p90_pessimistic, color="#c62828", linestyle="--", linewidth=2,
-                label=f"P90 (Pessimistic): ${estimate.cost_p90_pessimistic:,.0f}")
+                label=f"P90 (Pessimistic): ₹{estimate.cost_p90_pessimistic:,.0f}")
     ax2.axvline(estimate.ml_empirical_estimate, color="#8e24aa", linestyle=":", linewidth=2.2,
-                label=f"ML Claim Regressor: ${estimate.ml_empirical_estimate:,.0f}")
+                label=f"ML Claim Regressor: ₹{estimate.ml_empirical_estimate:,.0f}")
 
-    ax2.set_title(f"Uncertainty Bounds: ${estimate.estimated_total_cost:,.2f} Expected",
+    ax2.set_title(f"Uncertainty Bounds: ₹{estimate.estimated_total_cost:,.2f} Expected",
                   fontsize=13, fontweight="bold", pad=12)
-    ax2.set_xlabel("Estimated Total Repair Cost ($)", fontsize=11, fontweight="bold")
+    ax2.set_xlabel("Estimated Total Repair Cost (₹)", fontsize=11, fontweight="bold")
     ax2.set_ylabel("Probability Density", fontsize=11, fontweight="bold")
     ax2.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="none", fontsize=9)
     ax2.grid(True, linestyle="--", alpha=0.4)
 
     plt.suptitle(
         f"Automated Claim Valuation: {estimate.vehicle.make_model} ({estimate.predicted_severity.upper()})\n"
-        f"Net Insurer Payout: USD {estimate.net_claim_payout:,.2f} (Deductible: USD {estimate.policy_deductible:,.0f})",
+        f"Net Insurer Payout: INR {estimate.net_claim_payout:,.2f} (Deductible: INR {estimate.policy_deductible:,.0f})",
         fontsize=14, fontweight="bold", y=1.03
     )
 

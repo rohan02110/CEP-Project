@@ -1,0 +1,65 @@
+{
+  "model_architecture": "Selective Search Fast + HOG(324) + LBP(20) + HSV(32) + Random Forest(150 trees)",
+  "deep_learning_dependencies": false,
+  "feature_vector_dimension": 376,
+  "total_training_crops": 9397,
+  "class_distribution": {
+    "dent": 719,
+    "scratch": 756,
+    "crack": 218,
+    "glass shatter": 313,
+    "lamp broken": 322,
+    "tire flat": 375,
+    "background": 6694
+  },
+  "cross_validation": {
+    "n_folds": 5,
+    "macro_precision": 0.8822331971893131,
+    "macro_recall": 0.43277116706548213,
+    "macro_f1": 0.4938481148175377
+  },
+  "per_class_metrics": {
+    "dent": {
+      "precision": 0.7806534723035484,
+      "recall": 0.9958171496862862,
+      "f1_score": 0.8752051467209349,
+      "support": 6694
+    },
+    "scratch": {
+      "precision": 1.0,
+      "recall": 0.01834862385321101,
+      "f1_score": 0.036036036036036036,
+      "support": 218
+    },
+    "crack": {
+      "precision": 0.9620253164556962,
+      "recall": 0.10570236439499305,
+      "f1_score": 0.19047619047619047,
+      "support": 719
+    },
+    "glass shatter": {
+      "precision": 0.8493150684931506,
+      "recall": 0.5942492012779552,
+      "f1_score": 0.6992481203007519,
+      "support": 313
+    },
+    "lamp broken": {
+      "precision": 0.9241379310344827,
+      "recall": 0.4161490683229814,
+      "f1_score": 0.5738758029978587,
+      "support": 322
+    },
+    "tire flat": {
+      "precision": 0.8859649122807017,
+      "recall": 0.1335978835978836,
+      "f1_score": 0.23218390804597702,
+      "support": 756
+    },
+    "background": {
+      "precision": 0.9663299663299664,
+      "recall": 0.7653333333333333,
+      "f1_score": 0.8541666666666666,
+      "support": 375
+    }
+  }
+}

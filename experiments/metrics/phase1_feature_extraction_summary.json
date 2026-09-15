@@ -1,0 +1,12 @@
+{
+  "phase": 1,
+  "total_samples": 3088,
+  "severity_samples": 600,
+  "cardd_samples": 2488,
+  "total_numeric_features": 119,
+  "zero_nans": true,
+  "zero_infs": true,
+  "csv_path": "D:\\CEP project sy sem1\\Codebase CEP\\data\\processed\\features.csv",
+  "xlsx_path": "D:\\CEP project sy sem1\\Codebase CEP\\data\\processed\\features.xlsx",
+  "key_feature_separation_verified": true
+}

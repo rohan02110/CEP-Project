@@ -1,15 +1,17 @@
-torch>=2.0.0
-torchvision>=0.15.0
-ultralytics>=8.0.0
-timm>=0.9.0
-xgboost>=1.7.0
+# Classical Computer Vision & Tabular Machine Learning Pipeline Dependencies
+# Note: All Deep Learning frameworks (PyTorch, TorchVision, Ultralytics, TensorFlow) have been completely removed.
+
+opencv-python>=4.7.0
+scikit-image>=0.20.0
 scikit-learn>=1.2.0
+xgboost>=1.7.0
 pandas>=2.0.0
 numpy>=1.24.0
+scipy>=1.10.0
+openpyxl>=3.1.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
-opencv-python>=4.7.0
-pillow>=9.5.0
-huggingface_hub>=0.16.0
-pyyaml>=6.0
 joblib>=1.2.0
+pillow>=9.5.0
+streamlit>=1.25.0
+pyyaml>=6.0

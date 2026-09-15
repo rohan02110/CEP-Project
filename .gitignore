@@ -20,11 +20,13 @@ data/features/
 # Training runs & intermediate caches
 experiments/models/yolo_runs/
 runs/
+legacy/deep_learning_pipeline/runs/
+legacy/deep_learning_pipeline/*.pt
 *.cache
 yolov8n.pt
 Arial.ttf
 
 # Keep checkpoints, plots, metrics and code
-!experiments/models/yolov8_damage_best.pt
+!experiments/models/*.joblib
 !experiments/plots/
 !experiments/metrics/

@@ -1,6 +1,6 @@
 """
-Centralized configuration for the AI-Assisted Vehicle Damage Assessment Pipeline.
-Ensures reproducibility across all training, validation, and evaluation steps.
+Centralized configuration for the Classical Computer Vision & Tabular ML Vehicle Damage Assessment Pipeline.
+Ensures zero-leakage reproducibility across all feature extraction, validation, and evaluation steps.
 """
 
 from pathlib import Path
@@ -16,16 +16,23 @@ EXPERIMENTS_DIR = WORKSPACE_ROOT / "experiments"
 PLOTS_DIR = EXPERIMENTS_DIR / "plots"
 MODELS_DIR = EXPERIMENTS_DIR / "models"
 METRICS_DIR = EXPERIMENTS_DIR / "metrics"
+LEGACY_DIR = WORKSPACE_ROOT / "legacy" / "deep_learning_pipeline"
+
+# Processed Feature Table Paths
+FEATURES_CSV_PATH = PROCESSED_DATA_DIR / "features.csv"
+FEATURES_XLSX_PATH = PROCESSED_DATA_DIR / "features.xlsx"
+FEATURES_SEVERITY_CSV = PROCESSED_DATA_DIR / "features_severity.csv"
+FEATURES_CARDD_CSV = PROCESSED_DATA_DIR / "features_cardd.csv"
 
 # Ensure all critical directories exist
 for p in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, FEATURES_DIR, 
-         EXPERIMENTS_DIR, PLOTS_DIR, MODELS_DIR, METRICS_DIR]:
+         EXPERIMENTS_DIR, PLOTS_DIR, MODELS_DIR, METRICS_DIR, LEGACY_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 # Global Reproducibility Seed
 RANDOM_SEED = 42
 
-# CarDD Damage Detection Configuration
+# CarDD Damage Category Classes
 CARDD_CLASSES = [
     "dent",
     "scratch",
@@ -37,18 +44,23 @@ CARDD_CLASSES = [
 CARDD_CLASS_TO_IDX = {cls_name: idx for idx, cls_name in enumerate(CARDD_CLASSES)}
 CARDD_IDX_TO_CLASS = {idx: cls_name for idx, cls_name in enumerate(CARDD_CLASSES)}
 
-# Severity Benchmark Configuration
+# Severity Benchmark Classes
 SEVERITY_CLASSES = ["normal", "moderate_breakage", "severe_crushed"]
 SEVERITY_CLASS_TO_IDX = {cls_name: idx for idx, cls_name in enumerate(SEVERITY_CLASSES)}
 SEVERITY_IDX_TO_CLASS = {idx: cls_name for idx, cls_name in enumerate(SEVERITY_CLASSES)}
 
-# Image Preprocessing Constants
-IMG_SIZE_DETECTION = 640
-IMG_SIZE_CLASSIFICATION = 224
-NORM_MEAN = [0.485, 0.456, 0.406]
-NORM_STD = [0.229, 0.224, 0.225]
+# Classical Computer Vision Preprocessing Constants
+IMG_STANDARDIZED_SIZE = (512, 512)
+TEXTURE_EVAL_SIZE = (256, 256)
+FFT_EVAL_SIZE = (128, 128)
 
-# Split Ratios (Leakage-free)
+# Zero-Leakage Split Ratios
 TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
 TEST_RATIO = 0.15
+
+# Central Actuarial Currency Conversion Anchor (USD -> INR)
+# Fixed conversion rate as of project submission (1 USD = 95.5 INR)
+USD_TO_INR = 95.5
+CURRENCY_SYMBOL = "₹"
+

@@ -23,6 +23,12 @@ WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from src.config import PROCESSED_DATA_DIR, PLOTS_DIR
 from src.cost_estimator import VehicleProfile, VehicleSegment
 from src.pipeline import VehicleDamageAssessmentPipeline
@@ -35,11 +41,12 @@ def parse_args():
     parser.add_argument("--make", type=str, default="Honda Civic", help="Vehicle make and model name.")
     parser.add_argument("--year", type=int, default=2021, help="Model year of vehicle.")
     parser.add_argument("--segment", type=str, choices=["economy", "midsize", "suv", "luxury"], default="midsize", help="Vehicle category.")
-    parser.add_argument("--acv", type=float, default=22000.0, help="Actual Cash Value (market value) in USD.")
-    parser.add_argument("--deductible", type=float, default=500.0, help="Policyholder deductible in USD.")
+    parser.add_argument("--acv", type=float, default=2000000.0, help="Actual Cash Value (market value) in INR (₹).")
+    parser.add_argument("--deductible", type=float, default=25000.0, help="Policyholder deductible in INR (₹).")
     parser.add_argument("--conf", type=float, default=0.20, help="YOLOv8 damage confidence threshold.")
     parser.add_argument("--no-filter-bg", action="store_true", help="Disable background vehicle filtering.")
     parser.add_argument("--no-validate-tires", action="store_true", help="Disable tire deflation validation.")
+    parser.add_argument("--no-validate-glass", action="store_true", help="Disable glass shatter/window validation.")
     parser.add_argument("--out", type=str, default=None, help="Output plot destination path.")
     return parser.parse_args()
 
@@ -83,6 +90,7 @@ def main():
         conf_threshold=args.conf,
         filter_background_vehicles=not args.no_filter_bg,
         validate_tires=not args.no_validate_tires,
+        validate_glass=not args.no_validate_glass,
         output_plot_path=out_plot
     )
 
@@ -96,13 +104,14 @@ def main():
     print(f"• Damages Detected    : {len(result.detected_damages)}")
     print(f"• Filtered BG Clutter : {result.filtered_background_damages_count} instance(s)")
     print(f"• Suppressed Tires    : {result.suppressed_tire_false_positives_count} instance(s)")
+    print(f"• Suppressed Glass    : {result.suppressed_glass_false_positives_count} instance(s)")
     for d in result.detected_damages:
         print(f"   - #{d.instance_id} {d.damage_type.upper()} ({d.confidence*100:.1f}% conf, area: {d.normalized_area*100:.2f}%)")
     print(f"• Crash Severity      : {result.predicted_severity.upper()} ({result.severity_probabilities})")
-    print(f"• Gross Repair Cost   : USD {result.cost_estimate.estimated_total_cost:,.2f}")
-    print(f"• ML Empirical Claim  : USD {result.cost_estimate.ml_empirical_estimate:,.2f}")
-    print(f"• Net Claim Payout    : USD {result.cost_estimate.net_claim_payout:,.2f}")
-    print(f"• 90% Confidence      : USD {result.cost_estimate.cost_p10_optimistic:,.2f} - USD {result.cost_estimate.cost_p90_pessimistic:,.2f}")
+    print(f"• Gross Repair Cost   : INR {result.cost_estimate.estimated_total_cost:,.2f}")
+    print(f"• ML Empirical Claim  : INR {result.cost_estimate.ml_empirical_estimate:,.2f}")
+    print(f"• Net Claim Payout    : INR {result.cost_estimate.net_claim_payout:,.2f}")
+    print(f"• 90% Confidence      : INR {result.cost_estimate.cost_p10_optimistic:,.2f} - INR {result.cost_estimate.cost_p90_pessimistic:,.2f}")
     print(f"• Total Loss Status   : {'[!] CONSTRUCTIVE TOTAL LOSS' if result.cost_estimate.is_total_loss else '[OK] REPAIRABLE'}")
     print(f"• Fraud / Anomaly     : {result.fraud_audit.risk_level} (Score: {result.fraud_audit.anomaly_score:.2f})")
     print(f"• Latency             : {result.processing_time_ms:.1f} ms")
