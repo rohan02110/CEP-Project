@@ -387,11 +387,11 @@ def main():
                     # Crop patch directly from native original resolution image
                     crop_bgr = cv_img_bgr[y1:y2, x1:x2]
                     
-                    # 100% Classical HOG + LBP + HSV -> Random Forest Classification
-                    pred_cls, pred_conf, _ = pipeline.damage_detector.classify_region(crop_bgr)
-                    
                     # Compute exact normalized surface area a_k from user-drawn coordinates
                     norm_area = float((x2 - x1) * (y2 - y1)) / float(orig_w * orig_h)
+
+                    # 100% Classical HOG + LBP + HSV -> Random Forest Classification with Area Prior
+                    pred_cls, pred_conf, _ = pipeline.damage_detector.classify_region(crop_bgr, area_ratio=norm_area)
 
                     classified_damages.append(DetectedDamage(
                         instance_id=idx + 1,

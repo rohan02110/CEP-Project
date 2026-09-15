@@ -225,11 +225,13 @@ class ClassicalDamageDetector:
 
     def classify_region(
         self,
-        crop: Union[np.ndarray, Image.Image]
+        crop: Union[np.ndarray, Image.Image],
+        area_ratio: float = 0.0
     ) -> Tuple[str, float, Dict[str, float]]:
         """
         Classifies a single cropped damage image region using 376-dim handcrafted features
         (HOG + LBP + HSV) and the trained Random Forest classifier.
+        Applies Bayesian area and structural edge prior calibration for large collision zones.
         
         Returns:
             (predicted_class, confidence, class_probabilities_dict)
@@ -272,6 +274,36 @@ class ClassicalDamageDetector:
             norm_probs = {c: p / total_dmg_prob for c, p in dmg_probs.items()}
         else:
             norm_probs = {c: 1.0 / len(CARDD_CLASSES) for c in CARDD_CLASSES}
+
+        # Bayesian Area & Structural Edge Prior Calibration:
+        # In automotive collision physics, a scratch is a narrow, superficial abrasion (area < 0.04).
+        # Large regions (>4% of vehicle area) with high gradient variance represent dents, cracks, or heavy collisions.
+        if area_ratio > 0.03:
+            gray_crop = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+            canny_edges = cv2.Canny(gray_crop, 40, 120)
+            edge_density = float(np.mean(canny_edges > 0))
+            contrast_std = float(np.std(gray_crop)) / 128.0
+
+            prior_weights = {c: 1.0 for c in CARDD_CLASSES}
+
+            # Exponential attenuation of scratch prior on large macro-regions
+            scratch_decay = np.exp(-15.0 * (area_ratio - 0.03))
+            prior_weights["scratch"] = max(0.02, float(scratch_decay))
+
+            # Proportional boost for dent, crack, and broken lamp
+            prior_weights["dent"] = 1.0 + min(3.0, area_ratio * 18.0)
+            prior_weights["crack"] = 1.0 + min(2.5, area_ratio * 12.0)
+            prior_weights["lamp broken"] = 1.0 + min(2.0, area_ratio * 10.0)
+
+            if edge_density > 0.08 or contrast_std > 0.35:
+                prior_weights["dent"] *= 1.5
+                prior_weights["crack"] *= 1.35
+                prior_weights["lamp broken"] *= 1.25
+
+            weighted_probs = {c: norm_probs[c] * prior_weights[c] for c in CARDD_CLASSES}
+            w_total = sum(weighted_probs.values())
+            if w_total > 1e-6:
+                norm_probs = {c: p / w_total for c, p in weighted_probs.items()}
 
         best_cls = max(norm_probs, key=norm_probs.get)
         best_conf = float(norm_probs[best_cls])
@@ -322,9 +354,8 @@ class ClassicalDamageDetector:
                 continue
 
             crop = cv_img_bgr[iy1:iy2, ix1:ix2]
-            best_cls, best_conf, _ = self.classify_region(crop)
-
             norm_area = float(bw * bh) / img_area
+            best_cls, best_conf, _ = self.classify_region(crop, area_ratio=norm_area)
 
             detected_damages.append(DetectedDamage(
                 instance_id=idx + 1,
