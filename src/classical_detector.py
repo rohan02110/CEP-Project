@@ -226,7 +226,8 @@ class ClassicalDamageDetector:
     def classify_region(
         self,
         crop: Union[np.ndarray, Image.Image],
-        area_ratio: float = 0.0
+        area_ratio: float = 0.0,
+        **kwargs
     ) -> Tuple[str, float, Dict[str, float]]:
         """
         Classifies a single cropped damage image region using 376-dim handcrafted features

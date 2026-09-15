@@ -125,7 +125,11 @@ st.markdown("""
 def get_pipeline():
     """Initializes the end-to-end assessment pipeline with fresh module definitions."""
     import importlib
+    import src.classical_detector
+    import src.cost_estimator
     import src.pipeline
+    importlib.reload(src.classical_detector)
+    importlib.reload(src.cost_estimator)
     importlib.reload(src.pipeline)
     return src.pipeline.VehicleDamageAssessmentPipeline()
 
